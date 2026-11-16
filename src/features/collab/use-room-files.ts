@@ -18,7 +18,7 @@ import {
 } from "./file-sync"
 import { fetchRoomFile, uploadRoomFile } from "./file-transport"
 import type { SceneElement } from "./protocol"
-import { MAX_DRAWING_IMAGE_BYTES } from "./room-files"
+import { MAX_DRAWING_IMAGE_BYTES, MAX_IMAGE_BYTES } from "./room-files"
 import type { RoomPath } from "./room-url"
 
 const MAX_FETCH_ATTEMPTS = 3
@@ -38,6 +38,35 @@ export function toastImageCapFull() {
     // One toast for a batch of refusals.
     id: "image-cap-full",
     description: `A drawing saves up to ${MAX_DRAWING_IMAGE_BYTES / 1024 / 1024} MB of images. Remove some to add more. While shared, removed images can take up to a day to free their space.`,
+  })
+}
+
+// One toast per kind, so a batch of refusals shows it once.
+export function toastImageTooLarge() {
+  toast.error("This image is too large to save", {
+    id: "image-too-large",
+    description: `Images up to ${MAX_IMAGE_BYTES / 1024 / 1024} MB are saved with the drawing.`,
+  })
+}
+
+export function toastImageRateLimited() {
+  toast.error("Too many images at once", {
+    id: "image-rate-limited",
+    description: "Wait a minute, then add the image again.",
+  })
+}
+
+export function toastImageInvalid() {
+  toast.error("This image can't be saved", {
+    id: "image-invalid",
+    description: "Its file type or data is not supported.",
+  })
+}
+
+export function toastImageUploadFailed() {
+  toast.error("Couldn't save this image", {
+    id: "image-upload-failed",
+    description: "Check your connection, then add the image again.",
   })
 }
 
@@ -122,9 +151,18 @@ export function useRoomFiles(options: {
             skipUploadRef.current.delete(file.fileId)
             return
           }
+          // Their toasts say to add the image again; a re-add must upload.
+          if (outcome === "rate-limited" || outcome === "failed") {
+            skipUploadRef.current.delete(file.fileId)
+            uploadAttemptsRef.current.delete(file.fileId)
+          }
           const api = apiRef.current
           if (!api) return
           if (outcome === "full") toastImageCapFull()
+          else if (outcome === "too-large") toastImageTooLarge()
+          else if (outcome === "rate-limited") toastImageRateLimited()
+          else if (outcome === "invalid") toastImageInvalid()
+          else if (outcome === "failed") toastImageUploadFailed()
           markImageStatus(
             api,
             file.fileId,
