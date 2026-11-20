@@ -18,12 +18,21 @@ import type { Folder } from "@/features/folders/queries"
 import { foldersQueryOptions } from "@/features/folders/queries"
 import { Home } from "./Home"
 
-const { openCreateDrawingDialog, openCreateFolderDialog, routerSearch } =
-  vi.hoisted(() => ({
-    openCreateDrawingDialog: vi.fn(),
-    openCreateFolderDialog: vi.fn(),
-    routerSearch: { current: {} as { space?: Space } },
-  }))
+const {
+  openCreateDrawingDialog,
+  openCreateFolderDialog,
+  routerSearch,
+  importFiles,
+} = vi.hoisted(() => ({
+  openCreateDrawingDialog: vi.fn(),
+  openCreateFolderDialog: vi.fn(),
+  routerSearch: { current: {} as { space?: Space } },
+  importFiles: vi.fn(),
+}))
+
+vi.mock("@/features/drawings/import-files", () => ({
+  useImportDrawingFiles: () => importFiles,
+}))
 
 // Cards and rows poll for live sessions (spec §1.5); these tests are not
 // about the badge, so the poll answers "nobody".
@@ -528,6 +537,34 @@ test("browsing Team shows Team drawings and View all keeps the scope", () => {
   expect(
     screen.getByRole("link", { name: /view all/i }).getAttribute("href"),
   ).toBe("/drawings?space=team")
+})
+
+const dropFile = () => {
+  const file = new File(["{}"], "Plan.excalidraw")
+  fireEvent.drop(screen.getByRole("heading", { name: "Recent" }), {
+    dataTransfer: { types: ["Files"], files: [file] },
+  })
+  return file
+}
+
+test("files dropped on Home import into the root of the browsed space", () => {
+  renderHome({ teamEnabled: true, space: "team" })
+  const file = dropFile()
+
+  expect(importFiles).toHaveBeenCalledWith([file], {
+    folderId: null,
+    space: "team",
+  })
+})
+
+test("files dropped on Home go to Private while Team is hidden", () => {
+  renderHome({ teamEnabled: false, space: "team" })
+  const file = dropFile()
+
+  expect(importFiles).toHaveBeenCalledWith([file], {
+    folderId: null,
+    space: "private",
+  })
 })
 
 test("an empty Team offers to create there, not the first-run illustration", () => {
