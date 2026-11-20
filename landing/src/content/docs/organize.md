@@ -18,6 +18,12 @@ Each drawing card has a **⋯** menu, like each row in the sidebar. Use it to
 and space. The copy is named like the drawing, with " (copy)" at the end. It
 has no stars and no share link.
 
+## Pick up where you left off
+
+When you reopen a drawing, Excaliself restores your last canvas position and
+zoom, even if you only panned or zoomed. Each browser remembers its own view,
+also on shared drawings and share links.
+
 ## Select many drawings
 
 On **Home**, **All drawings**, and folder pages, point to a drawing and click

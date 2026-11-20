@@ -50,6 +50,7 @@ import {
   useReloadSceneAfterRoom,
   useSaveScenePayload,
 } from "@/features/drawings/scene"
+import { useDrawingViewport } from "@/features/drawings/use-drawing-viewport"
 import { useTeamLibrary } from "@/features/library/use-team-library"
 import { drawingShareQueryOptions } from "@/features/shares/queries"
 import { useAutoSave } from "@/hooks/use-auto-save"
@@ -115,6 +116,10 @@ export function DrawingCanvas({
   const { drawing, initialData, isDataCorrupt } = useDrawingScene(
     drawingId,
     fitTo,
+  )
+  const { getInitialData, observeViewport } = useDrawingViewport(
+    drawingId,
+    initialData,
   )
   // `useRoom` needs a stable reference.
   const storedFileIds = useMemo(
@@ -328,6 +333,8 @@ export function DrawingCanvas({
       appState: AppState,
       files: BinaryFiles,
     ) => {
+      observeViewport(appState)
+      if (readOnly) return
       // A room flags these itself, from the upload's answer.
       if (!isLive && excalidrawAPI) {
         for (const fileId of selectOversizedImages(
@@ -343,7 +350,15 @@ export function DrawingCanvas({
       // No-op until the room is joined.
       roomChange(elements, appState, files)
     },
-    [handleChange, roomChange, isLive, excalidrawAPI, storedFileIdSet],
+    [
+      observeViewport,
+      readOnly,
+      handleChange,
+      roomChange,
+      isLive,
+      excalidrawAPI,
+      storedFileIdSet,
+    ],
   )
 
   const handleNameSubmit = (newName: string) => {
@@ -360,7 +375,7 @@ export function DrawingCanvas({
   return (
     <div className="@container/canvas relative size-full">
       <Excalidraw
-        initialData={initialData}
+        initialData={getInitialData}
         excalidrawAPI={setExcalidrawAPI}
         // Controlled: the canvas renders in the app theme, and a theme baked
         // into the saved scene state is ignored on load. With the prop set,
@@ -368,7 +383,7 @@ export function DrawingCanvas({
         // Shift+Alt+D shortcut; `toggleTheme: false` pins that down.
         theme={canvasTheme}
         viewModeEnabled={readOnly || undefined}
-        onChange={readOnly ? undefined : handleSceneChange}
+        onChange={handleSceneChange}
         onPointerUpdate={readOnly ? undefined : room.onPointerUpdate}
         onScrollChange={readOnly ? undefined : room.onScrollChange}
         onLibraryChange={handleLibraryChange}

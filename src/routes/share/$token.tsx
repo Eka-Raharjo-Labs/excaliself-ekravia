@@ -101,6 +101,7 @@ function SharePage() {
   return (
     <Suspense fallback={<LoadingState />}>
       <SharedCanvas
+        key={resolution.drawing.id}
         drawing={resolution.drawing}
         files={resolution.files}
         token={token}
