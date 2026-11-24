@@ -6,12 +6,14 @@ import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
   Excalidraw,
-  exportToSvg,
+  exportScene,
   getCommonBounds,
+  getNonDeletedElements,
   restoreElements,
 } from "@excalidraw/excalidraw"
 import type {
   ExcalidrawElement,
+  NonDeletedExcalidrawElement,
   OrderedExcalidrawElement,
 } from "@excalidraw/excalidraw/element/types"
 import type {
@@ -43,6 +45,8 @@ import type { Decision } from "@/features/drawing-edits/store"
 import { m } from "@/paraglide/messages"
 import { getLocale } from "@/paraglide/runtime"
 
+// Room around the enlarged preview.
+const PREVIEW_OFFSETS = { top: 40, right: 40, bottom: 40, left: 40 }
 const HIGHLIGHT = { added: "#2f9e44", changed: "#1971c2", removed: "#e03131" }
 
 type Props = {
@@ -196,14 +200,13 @@ export function DrawingEditCard({ drawingId, excalidrawAPI, theme }: Props) {
               viewModeEnabled
               theme={theme}
               langCode={getLocale()}
-              excalidrawAPI={(api) =>
-                requestAnimationFrame(() =>
-                  api.scrollToContent(undefined, {
-                    fitToViewport: true,
-                    viewportZoomFactor: 0.9,
-                  }),
-                )
-              }
+              initialState={{
+                viewport: {
+                  target: preview,
+                  fit: "contain",
+                  offsets: PREVIEW_OFFSETS,
+                },
+              }}
               UIOptions={{
                 canvasActions: {
                   changeViewBackgroundColor: false,
@@ -254,7 +257,7 @@ function PreviewImage({
   files,
   theme,
 }: {
-  elements: readonly ExcalidrawElement[]
+  elements: readonly NonDeletedExcalidrawElement[]
   files: BinaryFiles
   theme: "light" | "dark"
 }) {
@@ -262,15 +265,11 @@ function PreviewImage({
 
   useEffect(() => {
     let cancelled = false
-    void exportToSvg({
-      elements,
-      appState: {
-        exportBackground: false,
-        exportWithDarkMode: theme === "dark",
-      },
-      files,
-      exportPadding: 12,
-    }).then((svg: SVGSVGElement) => {
+    void exportScene({
+      type: "svg",
+      data: { elements, files },
+      config: { canvasBackgroundColor: false, theme, padding: 12 },
+    }).then((svg) => {
       if (cancelled || !ref.current) return
       svg.removeAttribute("width")
       svg.removeAttribute("height")
@@ -294,8 +293,8 @@ function previewScene(
   current: readonly ExcalidrawElement[],
   elements: readonly ExcalidrawElement[],
   base: Record<string, Revision>,
-): ExcalidrawElement[] {
-  const after = withEdit(current, elements).filter((el) => !el.isDeleted)
+): readonly NonDeletedExcalidrawElement[] {
+  const after = getNonDeletedElements(withEdit(current, elements))
   const changed = new Set(elements.map(({ id }) => id))
   // A label is boxed with its container, when that changed too.
   const boxed = (element: ExcalidrawElement) =>
@@ -333,5 +332,5 @@ function previewScene(
       ),
     ...ghosts.filter(boxed).map((el) => box(el, HIGHLIGHT.removed)),
   ])
-  return [...after, ...ghosts, ...highlights]
+  return [...after, ...getNonDeletedElements([...ghosts, ...highlights])]
 }

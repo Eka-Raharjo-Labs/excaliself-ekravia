@@ -21,11 +21,8 @@ import {
   useSyncExternalStore,
 } from "react"
 import { toast } from "sonner"
-import {
-  FooterRightPortal,
-  TopLeftPortal,
-} from "@/components/excalidraw-portal"
-import { FollowModeOverlay } from "@/components/follow-mode-overlay"
+import { FooterRightPortal } from "@/components/excalidraw-portal"
+import { useFollowStatusFrame } from "@/components/follow-status-frame"
 import { MenuParticipants } from "@/components/menu-participants"
 import { MenuReconnecting } from "@/components/menu-reconnecting"
 import { PresenceAvatars } from "@/components/presence-avatars"
@@ -51,7 +48,6 @@ import {
 } from "@/features/drawings/queries"
 import {
   buildScenePayload,
-  type FitTo,
   getScenePayloadSignature,
   type ScenePayload,
   selectOversizedImages,
@@ -66,8 +62,8 @@ import { forgetDeviceDrawingWhenFree } from "@/features/offline/sync"
 import { useDeviceCopy } from "@/features/offline/use-device-copy"
 import { drawingShareQueryOptions } from "@/features/shares/queries"
 import { useAutoSave } from "@/hooks/use-auto-save"
-import { usePreloadTextFont } from "@/hooks/use-preload-text-font"
 import { useCanvasTheme } from "@/hooks/use-theme"
+import { cn } from "@/lib/utils"
 import { m } from "@/paraglide/messages"
 import { getLocale } from "@/paraglide/runtime"
 import { CommentsButton } from "./comments/CommentsButton"
@@ -93,8 +89,9 @@ const SHARE_LABEL_CLASS = "@max-6xl/canvas:hidden"
 const SHARE_MENU_ITEM_CLASS = "@5xl/canvas:hidden!"
 const PRESENCE_CLASS = "@max-[77rem]/canvas:hidden"
 const PRESENCE_MENU_ROW_CLASS = "@min-[77rem]/canvas:hidden!"
-// Room around fitted content; the top clears the toolbar, as Shift+1 does.
-const FIT_OFFSETS = { top: 80, right: 16, bottom: 16, left: 16 }
+// On a phone, view mode shows a button to leave it, which a read-only canvas
+// can't do.
+const READ_ONLY_CLASS = "[&_button.disable-view-mode]:hidden!"
 
 type Props = {
   drawingId: string
@@ -117,21 +114,8 @@ export function DrawingCanvas({
   const { toggleSidebar } = useSidebar()
   const canvasTheme = useCanvasTheme()
 
-  // The canvas opens fitted to its content, so it waits for its own size.
-  const [fitTo, setFitTo] = useState<FitTo>()
-  const measureCanvas = useCallback((node: HTMLDivElement | null) => {
-    if (node)
-      setFitTo({
-        width: node.clientWidth,
-        height: node.clientHeight,
-        offsets: FIT_OFFSETS,
-      })
-  }, [])
-  const { drawing, initialData, isDataCorrupt } = useDrawingScene(
-    drawingId,
-    fitTo,
-  )
-  const { getInitialData, observeViewport } = useDrawingViewport(
+  const { drawing, initialData, isDataCorrupt } = useDrawingScene(drawingId)
+  const { getInitialData, initialState, observeViewport } = useDrawingViewport(
     drawingId,
     initialData,
   )
@@ -144,7 +128,6 @@ export function DrawingCanvas({
   const renameMutation = useRenameDrawing()
   const [excalidrawAPI, setExcalidrawAPI] =
     useState<ExcalidrawImperativeAPI | null>(null)
-  usePreloadTextFont(excalidrawAPI)
   // Private drawings too: the library is the team's, not the space's.
   const handleLibraryChange = useTeamLibrary(excalidrawAPI)
 
@@ -236,6 +219,7 @@ export function DrawingCanvas({
     storedFileIds,
   })
   useRefreshLiveOnRoster(room.others)
+  const followStatusFrame = useFollowStatusFrame(room)
   // Autosave stays live until the share query answers; the server refuses the
   // write if the drawing is shared or in Team.
   const isLive = !readOnly && (isTeam || share != null)
@@ -435,13 +419,14 @@ export function DrawingCanvas({
 
   const roomChange = room.onChange
   const deviceChange = device.onChange
+  const following = room.userToFollow !== null
   const handleSceneChange = useCallback(
     (
       elements: readonly OrderedExcalidrawElement[],
       appState: AppState,
       files: BinaryFiles,
     ) => {
-      observeViewport(appState)
+      observeViewport(appState, following)
       if (readOnly) return
       // A room flags these itself, from the upload's answer.
       if (!isLive && excalidrawAPI) {
@@ -462,6 +447,7 @@ export function DrawingCanvas({
     },
     [
       observeViewport,
+      following,
       readOnly,
       handleChange,
       deviceChange,
@@ -481,13 +467,20 @@ export function DrawingCanvas({
   }
 
   if (!drawing || !initialData) return null
-  if (!fitTo) return <div ref={measureCanvas} className="size-full" />
 
   return (
-    <div className="@container/canvas relative size-full">
+    // `isolate`: Excalidraw's phone bars have a z-index above the app's
+    // sheets and dialogs, and would show through them.
+    <div
+      className={cn(
+        "@container/canvas relative isolate size-full",
+        readOnly && READ_ONLY_CLASS,
+      )}
+    >
       <Excalidraw
         initialData={getInitialData}
-        excalidrawAPI={setExcalidrawAPI}
+        initialState={initialState}
+        onExcalidrawAPI={setExcalidrawAPI}
         // Controlled: the canvas renders in the app theme, and a theme baked
         // into the saved scene state is ignored on load. With the prop set,
         // Excalidraw disables its toggleTheme action, which also retires the
@@ -499,33 +492,49 @@ export function DrawingCanvas({
         onPointerUpdate={readOnly ? undefined : room.onPointerUpdate}
         onScrollChange={readOnly ? undefined : room.onScrollChange}
         onLibraryChange={handleLibraryChange}
+        userToFollow={room.userToFollow}
+        viewportStatusFrame={followStatusFrame}
+        renderTopLeftUI={() => (
+          <TopLeftControls
+            // `key` resets the uncontrolled input when the cached drawing name
+            // changes from outside (e.g., rename triggered in the sidebar).
+            key={drawing.name}
+            initialName={drawing.name}
+            readOnly={readOnly}
+            onToggleSidebar={toggleSidebar}
+            onSubmit={handleNameSubmit}
+          />
+        )}
         renderTopRightUI={
           readOnly
             ? undefined
-            : () => (
-                <>
-                  <PresenceAvatars room={room} className={PRESENCE_CLASS} />
-                  <CommentsButton
-                    drawingId={drawingId}
-                    active={commentsOpen}
-                    onClick={toggleComments}
-                    className={SHARE_BUTTON_CLASS}
-                  />
-                  <Button
-                    data-tour="share"
-                    onClick={() => setShareOpen(true)}
-                    aria-label={m.drawing_share()}
-                    title={m.drawing_share()}
-                    className={SHARE_BUTTON_CLASS}
-                  >
-                    <Share2Icon className="h-3.5 w-3.5" />
-                    <span className={SHARE_LABEL_CLASS}>
-                      {m.drawing_share()}
-                    </span>
-                    {share && <SharingDot />}
-                  </Button>
-                </>
-              )
+            : // On a phone these are in the menu, and null keeps Excalidraw's
+              // own Library button there.
+              (isMobile) =>
+                isMobile ? null : (
+                  <>
+                    <PresenceAvatars room={room} className={PRESENCE_CLASS} />
+                    <CommentsButton
+                      drawingId={drawingId}
+                      active={commentsOpen}
+                      onClick={toggleComments}
+                      className={SHARE_BUTTON_CLASS}
+                    />
+                    <Button
+                      data-tour="share"
+                      onClick={() => setShareOpen(true)}
+                      aria-label={m.drawing_share()}
+                      title={m.drawing_share()}
+                      className={SHARE_BUTTON_CLASS}
+                    >
+                      <Share2Icon className="h-3.5 w-3.5" />
+                      <span className={SHARE_LABEL_CLASS}>
+                        {m.drawing_share()}
+                      </span>
+                      {share && <SharingDot />}
+                    </Button>
+                  </>
+                )
         }
         UIOptions={{
           canvasActions: {
@@ -609,19 +618,7 @@ export function DrawingCanvas({
             />
           </FooterRightPortal>
         )}
-        <TopLeftPortal>
-          <TopLeftControls
-            // `key` resets the uncontrolled input when the cached drawing name
-            // changes from outside (e.g., rename triggered in the sidebar).
-            key={drawing.name}
-            initialName={drawing.name}
-            readOnly={readOnly}
-            onToggleSidebar={toggleSidebar}
-            onSubmit={handleNameSubmit}
-          />
-        </TopLeftPortal>
       </Excalidraw>
-      <FollowModeOverlay room={room} />
       <CommentsLayer
         drawingId={drawingId}
         excalidrawAPI={excalidrawAPI}

@@ -1,8 +1,9 @@
 import type {
   AppState,
   ExcalidrawInitialDataState,
+  ExcalidrawInitialState,
 } from "@excalidraw/excalidraw/types"
-import { useCallback, useLayoutEffect, useRef } from "react"
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react"
 import { z } from "zod"
 import { useDebounceCallback } from "@/hooks/use-debounce-callback"
 
@@ -27,8 +28,8 @@ function readViewport(key: string) {
 
 /**
  * Remembers this browser's last pan and zoom for a drawing. The caller keys
- * its canvas by drawing, passes `getInitialData` to Excalidraw, and calls
- * `observeViewport` from `onChange`.
+ * its canvas by drawing, passes `getInitialData` and `initialState` to
+ * Excalidraw, and calls `observeViewport` from `onChange`.
  */
 export function useDrawingViewport(
   drawingId: string,
@@ -73,13 +74,26 @@ export function useDrawingViewport(
     }
   }, [initialData, key])
 
+  // Without a saved view, the view opens on the content, zoomed out to fit
+  // beside the editor's UI but never past 100%. The fit would replace a saved
+  // view, so it is left out then.
+  const initialState = useMemo<ExcalidrawInitialState | undefined>(() => {
+    const elements = initialData?.elements?.filter((el) => !el.isDeleted)
+    if (!elements?.length || readViewport(key)) return undefined
+    return {
+      viewport: { target: elements, fit: "scale-down", offsets: { ui: true } },
+    }
+  }, [initialData, key])
+
   const observeViewport = useCallback(
-    ({
-      scrollX,
-      scrollY,
-      zoom,
-      userToFollow,
-    }: Pick<AppState, "scrollX" | "scrollY" | "zoom" | "userToFollow">) => {
+    (
+      {
+        scrollX,
+        scrollY,
+        zoom,
+      }: Pick<AppState, "scrollX" | "scrollY" | "zoom">,
+      following: boolean,
+    ) => {
       const previous = lastObserved.current
       if (
         previous?.scrollX === scrollX &&
@@ -92,11 +106,11 @@ export function useDrawingViewport(
       lastObserved.current = next
       // Excalidraw's first onChange is the initialized view. Followed views
       // update the baseline too, so merely unfollowing doesn't save them.
-      if (!previous || userToFollow) return
+      if (!previous || following) return
       save(next)
     },
     [save],
   )
 
-  return { getInitialData, observeViewport }
+  return { getInitialData, initialState, observeViewport }
 }

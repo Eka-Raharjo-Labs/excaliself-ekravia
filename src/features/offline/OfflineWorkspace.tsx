@@ -15,6 +15,7 @@ import {
   selectOversizedImages,
 } from "@/features/drawings/scene"
 import { useCanvasTheme, useStoredTheme } from "@/hooks/use-theme"
+import { cn } from "@/lib/utils"
 import { m } from "@/paraglide/messages"
 import {
   canKeepDeviceDrawings,
@@ -108,12 +109,18 @@ function Canvas({
           {status}
         </span>
       </div>
-      <div className="min-h-0 flex-1">
+      <div
+        // On a phone, view mode shows a button to leave it, which does nothing here.
+        className={cn(
+          "min-h-0 flex-1",
+          isDataCorrupt && "[&_button.disable-view-mode]:hidden!",
+        )}
+      >
         <Excalidraw
           theme={theme}
           initialData={{ ...initialData, scrollToContent: true }}
           viewModeEnabled={isDataCorrupt || undefined}
-          excalidrawAPI={setApi}
+          onExcalidrawAPI={setApi}
           onChange={(elements, appState, files) => {
             // The server would refuse these, so flag them as the online
             // editor does.
