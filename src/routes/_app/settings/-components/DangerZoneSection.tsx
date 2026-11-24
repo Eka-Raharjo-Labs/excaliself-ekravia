@@ -10,6 +10,11 @@ import {
 } from "@/features/account/queries"
 import { deleteMyAccount } from "@/features/account/server"
 import type { OwnedContentCounts } from "@/features/admin/delete-user"
+import {
+  purgeDeviceDrawings,
+  setDeviceAccount,
+  supportsDeviceDrawings,
+} from "@/features/offline/store"
 import { describeContents } from "@/features/trash/destroy-copy"
 import { m } from "@/paraglide/messages"
 
@@ -31,9 +36,12 @@ export function DangerZoneSection({ user }: { user: CurrentUser }) {
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteMyAccount(),
-    onSuccess: () => {
+    onSuccess: async () => {
       // The account and its sessions are gone; a hard navigation drops every
-      // client cache along with them.
+      // client cache along with them. Its drawings on this device go too.
+      setDeviceAccount(null)
+      if (supportsDeviceDrawings())
+        await purgeDeviceDrawings(user.id).catch(() => {})
       window.location.href = "/login"
     },
     onError: () => toast.error(m.settings_danger_delete_failed()),
