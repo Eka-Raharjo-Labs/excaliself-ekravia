@@ -14,12 +14,20 @@ let db: Db
 beforeAll(async () => {
   db = await createPreviewDb()
   await db.insert(users).values(member)
-  await db.insert(folders).values({
-    id: "team-folder",
-    name: "Folder",
-    space: "team",
-    createdBy: demoAdmin.id,
-  })
+  await db.insert(folders).values([
+    {
+      id: "team-folder",
+      name: "Folder",
+      space: "team",
+      createdBy: demoAdmin.id,
+    },
+    {
+      id: "member-private-folder",
+      name: "Mine",
+      space: "private",
+      createdBy: member.id,
+    },
+  ])
   await db.insert(drawings).values([
     {
       id: "source",
@@ -38,6 +46,18 @@ beforeAll(async () => {
       name: "Private",
       space: "private",
       createdBy: demoAdmin.id,
+    },
+    {
+      id: "mine-private",
+      name: "Mine",
+      data: JSON.stringify({
+        elements: [{ id: "a", type: "text", text: "mine" }],
+        appState: { viewBackgroundColor: "#fff" },
+      }),
+      searchText: "mine",
+      folderId: "member-private-folder",
+      space: "private",
+      createdBy: member.id,
     },
   ])
   await db.insert(drawingFiles).values({
@@ -98,3 +118,27 @@ test("the copy's name still fits the limit", () => {
   expect(name).toHaveLength(MAX_NAME_LENGTH)
   expect(name.endsWith(" (copy)")).toBe(true)
 })
+
+test("a member's copy of their Private drawing lands in the Team root", async () => {
+  const copy = await copyDrawing(db, member.id, "mine-private", null)
+
+  expect(copy.name).toBe("Mine (copy)")
+  const stored = await row(copy.id)
+  expect(stored).toMatchObject({
+    folderId: null,
+    space: "team",
+    createdBy: member.id,
+  })
+}, 30_000)
+
+test("an admin's copy of a Private drawing stays next to it", async () => {
+  const copy = await copyDrawing(db, demoAdmin.id, "admins-private", null)
+
+  expect(copy.name).toBe("Private (copy)")
+  const stored = await row(copy.id)
+  expect(stored).toMatchObject({
+    folderId: null,
+    space: "private",
+    createdBy: demoAdmin.id,
+  })
+}, 30_000)

@@ -7,6 +7,7 @@ import { drawingFiles, drawings } from "@/db/schema"
 import { assertFolderTarget } from "@/features/folders/ownership"
 import { lockFolderTree } from "@/features/folders/tree-lock"
 import { accessibleTo } from "@/features/spaces/access"
+import { isPrivateAllowed } from "@/features/spaces/private-gate"
 import { MAX_NAME_LENGTH } from "./list-columns"
 import { sceneText } from "./search"
 
@@ -19,7 +20,9 @@ export function copyName(name: string): string {
 
 /**
  * Copies a drawing and its images next to it: same folder, same space. The
- * copy is the caller's own, new and unstarred, with no share link.
+ * copy is the caller's own, new and unstarred, with no share link. A member's
+ * copy of a Private drawing lands in the Team root instead: copies are new
+ * content, and members can't create in Private.
  * `liveElements`: the scene of the drawing's open Room, newer than the stored one.
  */
 export async function copyDrawing(
@@ -49,6 +52,11 @@ export async function copyDrawing(
     if (!source) throw new Error("Drawing not found")
     if (source.folderId) await assertFolderTarget(tx, userId, source.folderId)
 
+    const privateCopy =
+      source.space === "private" && !(await isPrivateAllowed(tx, userId))
+    const space = privateCopy ? "team" : source.space
+    const folderId = privateCopy ? null : source.folderId
+
     const copyId = randomUUID()
     const now = new Date()
     const name = copyName(source.name)
@@ -61,8 +69,8 @@ export async function copyDrawing(
             searchText: sceneText(liveElements),
           }
         : { data: source.data, searchText: source.searchText }),
-      folderId: source.folderId,
-      space: source.space,
+      folderId,
+      space,
       createdBy: userId,
       createdAt: now,
       updatedAt: now,

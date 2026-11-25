@@ -5,6 +5,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { SPACES } from "@/components/space-label"
 import type { Space } from "@/db/schema"
+import { currentUserQueryOptions } from "@/features/account/queries"
 import { liveDrawingsQueryOptions } from "@/features/collab/queries"
 import { isFileDrag } from "@/features/drawings/file-drop"
 import { cn } from "@/lib/utils"
@@ -18,21 +19,39 @@ export function SpaceSegments({ activeSpace }: { activeSpace: Space }) {
     ...liveDrawingsQueryOptions(),
     select: (live) => live.teamCount,
   })
+  const { data: role } = useQuery({
+    ...currentUserQueryOptions(),
+    select: (user) => user.role,
+  })
+  const { data: membersPrivateEnabled } = useQuery({
+    ...currentUserQueryOptions(),
+    select: (user) => user.membersPrivateEnabled,
+  })
+  // Members get Team only, full width, unless the admin setting lets them
+  // use Private; then the Private segment is shown, like for admins.
+  const privateAllowed = role === "admin" || membersPrivateEnabled === true
 
   return (
     <div className="px-2 pb-1">
       <div
         data-tour="spaces"
-        className="relative grid grid-cols-2 rounded-md bg-well p-0.5 shadow-well"
+        className={cn(
+          "relative grid rounded-md bg-well p-0.5 shadow-well",
+          privateAllowed ? "grid-cols-2" : "grid-cols-1",
+        )}
       >
-        <div
-          aria-hidden="true"
-          className={cn(
-            "pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-[5px] bg-keycap-from shadow-keycap transition-transform duration-200 ease-out motion-reduce:transition-none",
-            activeSpace === "team" && "translate-x-full",
-          )}
-        />
-        <Segment space="private" active={activeSpace === "private"} />
+        {privateAllowed && (
+          <div
+            aria-hidden="true"
+            className={cn(
+              "pointer-events-none absolute top-0.5 bottom-0.5 left-0.5 w-[calc(50%-2px)] rounded-[5px] bg-keycap-from shadow-keycap transition-transform duration-200 ease-out motion-reduce:transition-none",
+              activeSpace === "team" && "translate-x-full",
+            )}
+          />
+        )}
+        {privateAllowed && (
+          <Segment space="private" active={activeSpace === "private"} />
+        )}
         <Segment
           space="team"
           active={activeSpace === "team"}

@@ -23,13 +23,27 @@ beforeAll(async () => {
       space: "private",
       createdBy: demoAdmin.id,
     },
+    {
+      id: "member-private",
+      name: "Mine",
+      space: "private",
+      createdBy: member.id,
+    },
   ])
-  await db.insert(drawings).values({
-    id: "mine",
-    name: "Mine",
-    space: "private",
-    createdBy: member.id,
-  })
+  await db.insert(drawings).values([
+    {
+      id: "mine",
+      name: "Mine",
+      space: "private",
+      createdBy: member.id,
+    },
+    {
+      id: "team-drawing",
+      name: "Team drawing",
+      space: "team",
+      createdBy: member.id,
+    },
+  ])
 }, 30_000)
 
 const folderOf = async (id: string) =>
@@ -73,14 +87,46 @@ test("another member's Private folder is not a target", async () => {
 
 test("a drawing moves into its own Space's folder and back to the top", async () => {
   const folder = await insertFolder(db, member.id, {
-    name: "Mine too",
+    name: "Team too",
+    parentId: null,
+    space: "team",
+  })
+
+  await updateDrawingFields(db, member.id, "team-drawing", {
+    folderId: folder.id,
+  })
+  expect(await folderOf("team-drawing")).toBe(folder.id)
+
+  await updateDrawingFields(db, member.id, "team-drawing", { folderId: null })
+  expect(await folderOf("team-drawing")).toBeNull()
+}, 30_000)
+
+test("a member's top-level Private folder lands in Team", async () => {
+  const folder = await insertFolder(db, member.id, {
+    name: "Member private",
     parentId: null,
     space: "private",
   })
 
-  await updateDrawingFields(db, member.id, "mine", { folderId: folder.id })
-  expect(await folderOf("mine")).toBe(folder.id)
+  expect(folder.space).toBe("team")
+}, 30_000)
 
-  await updateDrawingFields(db, member.id, "mine", { folderId: null })
-  expect(await folderOf("mine")).toBeNull()
+test("an admin's top-level Private folder stays Private", async () => {
+  const folder = await insertFolder(db, demoAdmin.id, {
+    name: "Admin private",
+    parentId: null,
+    space: "private",
+  })
+
+  expect(folder.space).toBe("private")
+}, 30_000)
+
+test("a member cannot create a folder inside their own Private folder", async () => {
+  await expect(
+    insertFolder(db, member.id, {
+      name: "Sneaky",
+      parentId: "member-private",
+      space: "private",
+    }),
+  ).rejects.toThrow("Cannot create in a Private folder")
 }, 30_000)

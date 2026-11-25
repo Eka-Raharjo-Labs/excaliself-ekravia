@@ -1,8 +1,16 @@
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useState } from "react"
+import { toast } from "sonner"
 import { GitHubMark, REPO_URL } from "@/components/github-mark"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { currentUserQueryOptions } from "@/features/account/queries"
 import { formatBytes } from "@/features/instance/format-bytes"
-import { instanceStatsQueryOptions } from "@/features/instance/queries"
+import {
+  instanceSettingsQueryOptions,
+  instanceStatsQueryOptions,
+} from "@/features/instance/queries"
+import { setMembersPrivateEnabled } from "@/features/instance/server"
 import { useDelayedVisible } from "@/hooks/use-delayed-visible"
 import { m } from "@/paraglide/messages"
 import { getLocale } from "@/paraglide/runtime"
@@ -10,15 +18,20 @@ import { getLocale } from "@/paraglide/runtime"
 const RELEASES_URL = `${REPO_URL}/releases`
 const X_URL = "https://x.com/0xzygmunt"
 
-// Read-only About page (spec §5.15): zero settings — instance behavior is
-// deliberately hardcoded, so this page only answers "what version am I on,
-// how big is this instance".
+// About page (spec §5.15): the instance at a glance, plus its one admin
+// setting — whether members may use Private.
 export function InstanceSection() {
-  const { data: stats, isPending } = useQuery(instanceStatsQueryOptions())
+  const { data: stats, isPending: statsPending } = useQuery(
+    instanceStatsQueryOptions(),
+  )
+  const { data: settings, isPending: settingsPending } = useQuery(
+    instanceSettingsQueryOptions(),
+  )
+  const isPending = statsPending || settingsPending
   const showSkeleton = useDelayedVisible(isPending)
 
   if (isPending) return showSkeleton ? <InstanceSkeleton /> : null
-  if (!stats) return null
+  if (!stats || !settings) return null
 
   const count = new Intl.NumberFormat(getLocale())
   const rows = [
@@ -64,6 +77,8 @@ export function InstanceSection() {
         ))}
       </dl>
 
+      <MemberPrivateToggle enabled={settings.membersPrivateEnabled} />
+
       <p className="mt-4 flex items-center gap-3 text-xs text-muted-foreground">
         <a
           href={RELEASES_URL}
@@ -102,6 +117,72 @@ export function InstanceSection() {
         </a>
       </p>
     </section>
+  )
+}
+
+// The instance's one admin setting. Off means members create in Team only;
+// on gives them Private back, exactly as upstream behaves. The change
+// applies at once: the sidebar and the server gate both read the setting
+// on every check, and the current-user query is invalidated so this admin's
+// own sidebar follows immediately.
+function MemberPrivateToggle({ enabled }: { enabled: boolean }) {
+  const queryClient = useQueryClient()
+  const [busy, setBusy] = useState(false)
+
+  const { mutateAsync } = useMutation({
+    mutationFn: (next: boolean) =>
+      setMembersPrivateEnabled({ data: { enabled: next } }),
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: instanceSettingsQueryOptions().queryKey,
+      })
+      queryClient.invalidateQueries({
+        queryKey: currentUserQueryOptions().queryKey,
+      })
+    },
+  })
+
+  const toggle = async () => {
+    setBusy(true)
+    try {
+      await mutateAsync(!enabled)
+    } catch {
+      toast.error(m.settings_instance_member_private_failed())
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="mt-6 border-t border-border/60 pt-4">
+      <h3 className="text-sm font-medium text-foreground">
+        {m.settings_instance_member_private_title()}
+      </h3>
+      <p className="text-xs text-muted-foreground">
+        {m.settings_instance_member_private_description()}
+      </p>
+      <div className="mt-3 flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-sm text-foreground">
+            {m.settings_instance_member_private_label()}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            {m.settings_instance_member_private_hint()}
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          disabled={busy}
+          onClick={toggle}
+        >
+          {enabled
+            ? m.settings_instance_member_private_turn_off()
+            : m.settings_instance_member_private_turn_on()}
+        </Button>
+      </div>
+    </div>
   )
 }
 

@@ -13,7 +13,7 @@ import { currentUserQueryOptions } from "@/features/account/queries"
 import { drawingsQueryOptions } from "@/features/drawings/queries"
 import { foldersQueryOptions } from "@/features/folders/queries"
 import { validateSpaceSearch } from "@/features/spaces/browse"
-import { ActiveSpaceProvider } from "./ActiveSpace"
+import { ActiveSpaceProvider, useActiveSpace } from "./ActiveSpace"
 
 vi.mock("@/features/account/server", () => ({ getCurrentUser: vi.fn() }))
 vi.mock("@/features/drawings/server", () => ({ getDrawings: vi.fn() }))
@@ -25,13 +25,23 @@ afterEach(() => {
   window.localStorage.clear()
 })
 
+function SpaceProbe() {
+  const { activeSpace } = useActiveSpace()
+  return <p data-testid="active-space">{activeSpace ?? "none"}</p>
+}
+
 // Home and a Drawing under the provider; the Drawing loads for a moment, like
 // the real one, so the router sits pending between the two.
-function renderApp(initialEntry: string) {
+function renderApp(
+  initialEntry: string,
+  role: "admin" | "user" = "user",
+  membersPrivateEnabled = false,
+) {
   const root = createRootRoute({
     component: () => (
       <ActiveSpaceProvider>
         <Outlet />
+        <SpaceProbe />
       </ActiveSpaceProvider>
     ),
   })
@@ -57,10 +67,11 @@ function renderApp(initialEntry: string) {
     id: "user-1",
     email: "ada@example.com",
     name: "Ada",
-    role: "user",
+    role,
     image: null,
     hasPassword: true,
     teamEnabled: true,
+    membersPrivateEnabled,
   })
   client.setQueryData(drawingsQueryOptions().queryKey, [])
   client.setQueryData(foldersQueryOptions().queryKey, [])
@@ -89,4 +100,29 @@ test("leaving Home in Team for a Drawing stays on the Drawing", async () => {
   // Let any bounce back to Home land before checking.
   await act(() => new Promise((resolve) => setTimeout(resolve, 50)))
   expect(router.state.location.pathname).toBe("/draw/d1")
+})
+
+test("a member's bare Home opens in Team even with a private last-used space", async () => {
+  window.localStorage.setItem("excaliself:last-space", "private")
+  renderApp("/draw", "user")
+  await screen.findByText("Home")
+  expect((await screen.findByTestId("active-space")).textContent).toBe("team")
+})
+
+test("an admin's bare Home keeps their private last-used space", async () => {
+  window.localStorage.setItem("excaliself:last-space", "private")
+  renderApp("/draw", "admin")
+  await screen.findByText("Home")
+  expect((await screen.findByTestId("active-space")).textContent).toBe(
+    "private",
+  )
+})
+
+test("a member's bare Home keeps their private last-used space while the setting is on", async () => {
+  window.localStorage.setItem("excaliself:last-space", "private")
+  renderApp("/draw", "user", true)
+  await screen.findByText("Home")
+  expect((await screen.findByTestId("active-space")).textContent).toBe(
+    "private",
+  )
 })

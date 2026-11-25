@@ -6,12 +6,14 @@ import type { Db } from "@/db"
 import { drawings, type Space } from "@/db/schema"
 import { assertFolderTarget } from "@/features/folders/ownership"
 import { lockFolderTree } from "@/features/folders/tree-lock"
+import { gateCreateSpace } from "@/features/spaces/private-gate"
 import { sceneText } from "./search"
 
 /**
  * Inside a folder the drawing takes the folder's space, and `space` is
  * ignored. A new drawing has no Room yet, so its first scene is written here
- * whatever its space.
+ * whatever its space. Members never land in Private: a top-level Private
+ * create moves to Team, and creating inside a Private folder is rejected.
  */
 export async function insertDrawing(
   db: Db,
@@ -27,9 +29,10 @@ export async function insertDrawing(
   const now = new Date()
   return db.transaction(async (tx) => {
     await lockFolderTree(tx, "place")
-    const space = input.folderId
+    const resolved = input.folderId
       ? await assertFolderTarget(tx, userId, input.folderId)
       : input.space
+    const space = await gateCreateSpace(tx, userId, resolved, input.folderId)
     await tx.insert(drawings).values({
       id,
       name: input.name,

@@ -182,6 +182,14 @@ export const passwordResets = pgTable(
   }),
 )
 
+// Instance-wide settings, one row per key. Values are plain strings;
+// "true"/"false" for booleans. A missing row means the default (off for
+// every setting so far), so a fresh instance needs no seed row.
+export const instanceSettings = pgTable("instance_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+})
+
 // Where a drawing or folder lives: its creator's Private space or the shared
 // Team space. Who may see a row is decided in features/spaces/access.ts.
 export const spaces = ["private", "team"] as const

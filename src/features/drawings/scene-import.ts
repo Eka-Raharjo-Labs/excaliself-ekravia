@@ -11,6 +11,7 @@ import {
 } from "@/features/collab/room-files"
 import { assertFolderTarget } from "@/features/folders/ownership"
 import { lockFolderTree, type Tx } from "@/features/folders/tree-lock"
+import { gateCreateSpace } from "@/features/spaces/private-gate"
 import { dataUrlToBytes } from "./file-bytes"
 import { referencedFileIds } from "./scene-write"
 import { sceneText } from "./search"
@@ -124,7 +125,11 @@ export async function insertPreparedDrawing(
   return id
 }
 
-/** Imports one dropped file's scene into a folder, or the root of `space`. */
+/**
+ * Imports one dropped file's scene into a folder, or the root of `space`.
+ * Members never land in Private: a top-level Private import moves to Team,
+ * and importing into a Private folder is rejected.
+ */
 export async function importDrawing(
   db: Db,
   userId: string,
@@ -140,9 +145,10 @@ export async function importDrawing(
   return db.transaction(async (tx) => {
     await lockFolderTree(tx, "place")
     // Inside a folder the drawing takes the folder's space.
-    const space = input.folderId
+    const resolved = input.folderId
       ? await assertFolderTarget(tx, userId, input.folderId)
       : input.space
+    const space = await gateCreateSpace(tx, userId, resolved, input.folderId)
     const now = new Date()
     const importedAt = new Date(Math.min(input.lastModified, now.getTime()))
     const id = await insertPreparedDrawing(tx, prepared, {

@@ -102,6 +102,7 @@ const viewer = {
   image: null,
   hasPassword: true,
   teamEnabled: false,
+  membersPrivateEnabled: false,
 }
 
 const clipboardWriteText = vi.fn()

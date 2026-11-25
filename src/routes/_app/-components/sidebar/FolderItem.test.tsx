@@ -191,6 +191,7 @@ const userWithTeam = (teamEnabled: boolean) => ({
   image: null,
   hasPassword: true,
   teamEnabled,
+  membersPrivateEnabled: false,
 })
 
 test("a private row offers Move to Team, above Move to trash", async () => {

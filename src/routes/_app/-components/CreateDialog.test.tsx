@@ -57,6 +57,7 @@ beforeEach(() => {
     image: null,
     hasPassword: true,
     teamEnabled: false,
+    membersPrivateEnabled: false,
   })
 })
 
@@ -247,6 +248,7 @@ test("while browsing Team, the dialog says so and creates in Team", async () => 
     image: null,
     hasPassword: true,
     teamEnabled: true,
+    membersPrivateEnabled: false,
   })
   routerSearch.current = { space: "team" }
   vi.mocked(createDrawing).mockResolvedValue(NEW_DRAWING_ID)
@@ -264,5 +266,35 @@ test("while browsing Team, the dialog says so and creates in Team", async () => 
   await waitFor(() => expect(createDrawing).toHaveBeenCalledTimes(1))
   expect(vi.mocked(createDrawing).mock.calls[0]?.[0]).toEqual({
     data: { name: "Team retro", folderId: null, space: "team" },
+  })
+})
+
+test("a member with no space param is offered Team, never Private", async () => {
+  vi.mocked(getCurrentUser).mockResolvedValue({
+    id: "user-1",
+    email: "ada@example.com",
+    name: "",
+    role: "user",
+    image: null,
+    hasPassword: true,
+    teamEnabled: true,
+    membersPrivateEnabled: false,
+  })
+  routerSearch.current = {}
+  vi.mocked(createDrawing).mockResolvedValue(NEW_DRAWING_ID)
+
+  render(
+    <CreateDialog open onOpenChange={vi.fn()} target={{ kind: "drawing" }} />,
+    { wrapper },
+  )
+
+  expect(await screen.findByText("in Team")).toBeTruthy()
+  const input = screen.getByPlaceholderText(/drawing name/i)
+  fireEvent.change(input, { target: { value: "Member retro" } })
+  fireEvent.keyDown(input, { key: "Enter" })
+
+  await waitFor(() => expect(createDrawing).toHaveBeenCalledTimes(1))
+  expect(vi.mocked(createDrawing).mock.calls[0]?.[0]).toEqual({
+    data: { name: "Member retro", folderId: null, space: "team" },
   })
 })

@@ -202,6 +202,7 @@ function renderTrashPage(
     image: null,
     hasPassword: true,
     teamEnabled,
+    membersPrivateEnabled: false,
   }
   client.setQueryData(trashQueryOptions().queryKey, items)
   client.setQueryData(currentUserQueryOptions().queryKey, user)

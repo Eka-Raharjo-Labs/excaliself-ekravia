@@ -36,6 +36,7 @@ const viewer: CurrentUser = {
   image: null,
   hasPassword: true,
   teamEnabled: false,
+  membersPrivateEnabled: false,
 }
 
 // jsdom doesn't implement navigation — swap in a plain object so the

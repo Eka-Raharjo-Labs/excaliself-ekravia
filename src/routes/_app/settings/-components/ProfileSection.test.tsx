@@ -38,6 +38,7 @@ const user: CurrentUser = {
   image: null,
   hasPassword: true,
   teamEnabled: false,
+  membersPrivateEnabled: false,
 }
 
 let queryClient: QueryClient
