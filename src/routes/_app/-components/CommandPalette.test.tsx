@@ -110,6 +110,7 @@ function makeClient({
     image: null,
     hasPassword: true,
     teamEnabled,
+    membersPrivateEnabled: false,
   })
   return client
 }

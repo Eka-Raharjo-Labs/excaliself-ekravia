@@ -142,6 +142,8 @@ function renderHome({
   isAdmin = false,
   teamEnabled = false,
   space,
+  role = "user",
+  membersPrivateEnabled = false,
 }: {
   drawings?: Drawing[]
   folders?: Folder[]
@@ -149,6 +151,8 @@ function renderHome({
   teamEnabled?: boolean
   /** The `space` search param. */
   space?: Space
+  role?: "admin" | "user"
+  membersPrivateEnabled?: boolean
 } = {}) {
   routerSearch.current = { space }
   // Seeded data is the fixture — keep react-query from refetching it through
@@ -162,10 +166,11 @@ function renderHome({
     id: "user-1",
     email: "ada@example.com",
     name: "",
-    role: "user",
+    role,
     image: null,
     hasPassword: true,
     teamEnabled,
+    membersPrivateEnabled,
   })
   return render(
     <QueryClientProvider client={client}>
@@ -525,7 +530,23 @@ test("while Team is hidden the space param is ignored", () => {
 })
 
 test("with Team on, Home shows Private by default", () => {
+  renderHome({ drawings: mixedSpaces, teamEnabled: true, role: "admin" })
+
+  expect(cardHrefs()).toEqual(["/draw/mine"])
+})
+
+test("with Team on, Home shows Team by default for members", () => {
   renderHome({ drawings: mixedSpaces, teamEnabled: true })
+
+  expect(cardHrefs()).toEqual(["/draw/ours"])
+})
+
+test("with Team on, Home shows Private by default for members while the setting is on", () => {
+  renderHome({
+    drawings: mixedSpaces,
+    teamEnabled: true,
+    membersPrivateEnabled: true,
+  })
 
   expect(cardHrefs()).toEqual(["/draw/mine"])
 })

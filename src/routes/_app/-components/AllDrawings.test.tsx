@@ -133,6 +133,8 @@ function renderAllDrawings({
   isAdmin = false,
   teamEnabled = false,
   space,
+  role = "user",
+  membersPrivateEnabled = false,
 }: {
   drawings?: Drawing[]
   folders?: Folder[]
@@ -140,6 +142,8 @@ function renderAllDrawings({
   teamEnabled?: boolean
   /** The `space` search param. */
   space?: Space
+  role?: "admin" | "user"
+  membersPrivateEnabled?: boolean
 } = {}) {
   routerSearch.current = { space }
   // Seeded data is the fixture — keep react-query from refetching it through
@@ -153,10 +157,11 @@ function renderAllDrawings({
     id: "user-1",
     email: "ada@example.com",
     name: "",
-    role: "user",
+    role,
     image: null,
     hasPassword: true,
     teamEnabled,
+    membersPrivateEnabled,
   })
   const view = render(
     <QueryClientProvider client={client}>
@@ -514,7 +519,7 @@ test("with Team on, the grid and folder chips scope to the browsed space", () =>
     { ...makeFolder("f2", "Roadmap"), space: "team" as const },
   ]
 
-  renderAllDrawings({ drawings, folders, teamEnabled: true })
+  renderAllDrawings({ drawings, folders, teamEnabled: true, role: "admin" })
   expect(cardHrefs()).toEqual(["/draw/mine"])
   expect(screen.getByRole("button", { name: "Sketches" })).toBeTruthy()
   expect(screen.queryByRole("button", { name: "Roadmap" })).toBeNull()
@@ -524,6 +529,43 @@ test("with Team on, the grid and folder chips scope to the browsed space", () =>
   expect(cardHrefs()).toEqual(["/draw/ours"])
   expect(screen.getByRole("button", { name: "Roadmap" })).toBeTruthy()
   expect(screen.queryByRole("button", { name: "Sketches" })).toBeNull()
+})
+
+test("with Team on, a member's grid scopes to Team by default", () => {
+  const drawings = [
+    makeDrawing({ id: "mine", folderId: "f1" }),
+    makeDrawing({ id: "ours", space: "team", folderId: "f2" }),
+  ]
+  const folders = [
+    makeFolder("f1", "Sketches"),
+    { ...makeFolder("f2", "Roadmap"), space: "team" as const },
+  ]
+
+  renderAllDrawings({ drawings, folders, teamEnabled: true })
+  expect(cardHrefs()).toEqual(["/draw/ours"])
+  expect(screen.getByRole("button", { name: "Roadmap" })).toBeTruthy()
+  expect(screen.queryByRole("button", { name: "Sketches" })).toBeNull()
+})
+
+test("with Team on, a member's grid scopes to Private by default while the setting is on", () => {
+  const drawings = [
+    makeDrawing({ id: "mine", folderId: "f1" }),
+    makeDrawing({ id: "ours", space: "team", folderId: "f2" }),
+  ]
+  const folders = [
+    makeFolder("f1", "Sketches"),
+    { ...makeFolder("f2", "Roadmap"), space: "team" as const },
+  ]
+
+  renderAllDrawings({
+    drawings,
+    folders,
+    teamEnabled: true,
+    membersPrivateEnabled: true,
+  })
+  expect(cardHrefs()).toEqual(["/draw/mine"])
+  expect(screen.getByRole("button", { name: "Sketches" })).toBeTruthy()
+  expect(screen.queryByRole("button", { name: "Roadmap" })).toBeNull()
 })
 
 // The card around a drawing's stretched link

@@ -15,41 +15,50 @@ import {
 import { isLastAdmin } from "@/features/admin/roles"
 import { endRooms, rooms } from "@/features/collab/room-registry"
 import { evictUser } from "@/features/collab/room-session"
+import { getMembersPrivateEnabled } from "@/features/instance/settings"
 import { isTeamEnabled } from "@/features/spaces/team-enabled"
 import { auth } from "@/lib/auth"
 import { authMiddleware } from "@/middleware/auth"
 import { compareSessions } from "./sessions"
 
 // The caller's users row, plus teamEnabled, the instance-wide gate on every
-// Team UI element. hasPassword is false for members who only use SSO.
+// Team UI element, and membersPrivateEnabled, the admin setting that lets
+// members use Private. hasPassword is false for members who only use SSO.
 export const getCurrentUser = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async ({ context }) => {
     const userId = context.session.user.id
-    const [[user], [password], teamEnabled] = await Promise.all([
-      db
-        .select({
-          id: users.id,
-          email: users.email,
-          name: users.name,
-          image: users.image,
-          role: users.role,
-        })
-        .from(users)
-        .where(eq(users.id, userId)),
-      db
-        .select({ id: accounts.id })
-        .from(accounts)
-        .where(
-          and(
-            eq(accounts.userId, userId),
-            eq(accounts.providerId, "credential"),
+    const [[user], [password], teamEnabled, membersPrivateEnabled] =
+      await Promise.all([
+        db
+          .select({
+            id: users.id,
+            email: users.email,
+            name: users.name,
+            image: users.image,
+            role: users.role,
+          })
+          .from(users)
+          .where(eq(users.id, userId)),
+        db
+          .select({ id: accounts.id })
+          .from(accounts)
+          .where(
+            and(
+              eq(accounts.userId, userId),
+              eq(accounts.providerId, "credential"),
+            ),
           ),
-        ),
-      isTeamEnabled(db),
-    ])
+        isTeamEnabled(db),
+        getMembersPrivateEnabled(db),
+      ])
     if (!user) throw new Error("User not found")
-    return { ...user, hasPassword: password !== undefined, teamEnabled }
+    return {
+      ...user,
+      hasPassword: password !== undefined,
+      teamEnabled,
+      membersPrivateEnabled,
+    }
   })
 
 export type ChangeEmailResult =

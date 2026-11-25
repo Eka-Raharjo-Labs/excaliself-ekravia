@@ -15,12 +15,15 @@ export const validateSpaceSearch = (
 
 /**
  * The space the member is browsing: the `space` param, Private by default.
- * Null while Team is hidden, which means "no space filter".
+ * Null while Team is hidden, which means "no space filter". Members browse
+ * Team unless the admin setting lets them use Private.
  */
 export function useBrowsedSpace(): Space | null {
   const { data: user } = useQuery(currentUserQueryOptions())
   const { space = "private" } = useSearch({ strict: false })
-  return user?.teamEnabled ? space : null
+  if (!user?.teamEnabled) return null
+  if (user.role !== "admin" && !user.membersPrivateEnabled) return "team"
+  return space
 }
 
 /** The rows of the browsed space; every row while Team is hidden. */

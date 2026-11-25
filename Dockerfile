@@ -24,6 +24,11 @@ ENV HOST=0.0.0.0
 
 COPY --from=builder /app/.output ./.output
 COPY --from=builder /app/drizzle ./drizzle
+# The runner drops to `USER node` below, so the migration files must be
+# world-readable: a checkout/tarball with owner-only modes (e.g. 660) makes
+# drizzle-orm's existsSync() on meta/_journal.json return false and the
+# app dies in a restart loop with "Can't find meta/_journal.json file".
+RUN chmod -R a+rX /app/drizzle
 # Preview mode loads PGlite and its wasm from node_modules at runtime
 # (src/db/preview.ts). It has no dependencies of its own.
 COPY --from=builder /app/node_modules/@electric-sql/pglite ./node_modules/@electric-sql/pglite

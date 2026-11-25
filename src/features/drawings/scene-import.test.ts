@@ -4,7 +4,7 @@ import { beforeAll, expect, test } from "vitest"
 import { demoAdmin } from "@/db/demo-content"
 import type { Db } from "@/db/index"
 import { createPreviewDb } from "@/db/preview"
-import { drawingFiles, drawings, users } from "@/db/schema"
+import { drawingFiles, drawings, folders, users } from "@/db/schema"
 import { MAX_DRAWING_IMAGE_BYTES } from "@/features/collab/room-files"
 import { importDrawing, prepareScene, type SceneContent } from "./scene-import"
 
@@ -151,4 +151,60 @@ test("a dropped file can't go into someone else's private folder", async () => {
       content: content([]),
     }),
   ).rejects.toThrow("Folder not found")
+})
+
+test("a member's top-level Private import lands in Team", async () => {
+  const imported = await importDrawing(db, "member", {
+    name: "Member import",
+    folderId: null,
+    space: "private",
+    lastModified: Date.now(),
+    content: content([]),
+  })
+
+  expect(imported.space).toBe("team")
+  const [drawing] = await db
+    .select()
+    .from(drawings)
+    .where(eq(drawings.id, imported.id))
+  expect(drawing).toMatchObject({ space: "team", createdBy: "member" })
+})
+
+test("an admin's top-level Private import stays Private", async () => {
+  const imported = await importDrawing(db, demoAdmin.id, {
+    name: "Admin import",
+    folderId: null,
+    space: "private",
+    lastModified: Date.now(),
+    content: content([]),
+  })
+
+  expect(imported.space).toBe("private")
+})
+
+test("a member cannot import into their own Private folder", async () => {
+  await db
+    .insert(users)
+    .values({
+      id: "member",
+      email: "member@example.com",
+      name: "Member",
+    })
+    .onConflictDoNothing()
+  await db.insert(folders).values({
+    id: "member-private-folder",
+    name: "Mine",
+    space: "private",
+    createdBy: "member",
+  })
+
+  await expect(
+    importDrawing(db, "member", {
+      name: "Sneaky import",
+      folderId: "member-private-folder",
+      space: "private",
+      lastModified: Date.now(),
+      content: content([]),
+    }),
+  ).rejects.toThrow("Cannot create in a Private folder")
 })

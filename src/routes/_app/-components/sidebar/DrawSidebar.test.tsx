@@ -141,14 +141,19 @@ const DRAWINGS = [
 ]
 const FOLDERS = [folder("t-design", "Design", { space: "team" })]
 
-const user = (teamEnabled: boolean) => ({
+const user = (
+  teamEnabled: boolean,
+  role: "admin" | "user" = "user",
+  membersPrivateEnabled = false,
+) => ({
   id: "user-1",
   email: "ada@example.com",
   name: "Ada",
-  role: "user" as const,
+  role,
   image: null,
   hasPassword: true,
   teamEnabled,
+  membersPrivateEnabled,
 })
 
 let drawings: Drawing[]
@@ -161,12 +166,21 @@ beforeEach(() => {
   vi.mocked(getLiveDrawings).mockResolvedValue({ drawings: [], teamCount: 0 })
 })
 
-function renderSidebar(teamEnabled: boolean) {
-  vi.mocked(getCurrentUser).mockResolvedValue(user(teamEnabled))
+function renderSidebar(
+  teamEnabled: boolean,
+  role: "admin" | "user" = "user",
+  membersPrivateEnabled = false,
+) {
+  vi.mocked(getCurrentUser).mockResolvedValue(
+    user(teamEnabled, role, membersPrivateEnabled),
+  )
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
-  client.setQueryData(currentUserQueryOptions().queryKey, user(teamEnabled))
+  client.setQueryData(
+    currentUserQueryOptions().queryKey,
+    user(teamEnabled, role, membersPrivateEnabled),
+  )
   client.setQueryData(drawingsQueryOptions().queryKey, drawings)
   client.setQueryData(foldersQueryOptions().queryKey, FOLDERS)
   render(
@@ -181,7 +195,7 @@ function renderSidebar(teamEnabled: boolean) {
                 email: "ada@example.com",
                 name: "Ada",
                 image: null,
-                isAdmin: false,
+                isAdmin: role === "admin",
               }}
             />
           </MoveToTeamProvider>
@@ -204,21 +218,44 @@ const dataTransfer = () => ({
 
 test("a solo instance gets today's sidebar; the control appears, on Private, once Team turns on", async () => {
   drawings = DRAWINGS.filter((d) => d.space === "private")
-  const client = renderSidebar(false)
+  const client = renderSidebar(false, "admin")
 
   expect(screen.queryByRole("button", { name: "Private" })).toBeNull()
   expect(document.querySelector("[inert]")).toBeNull()
   expect(screen.getByText("Meeting notes")).toBeTruthy()
 
   // The current-user poll brings the flag; no reload.
-  act(() => client.setQueryData(currentUserQueryOptions().queryKey, user(true)))
+  act(() =>
+    client.setQueryData(
+      currentUserQueryOptions().queryKey,
+      user(true, "admin"),
+    ),
+  )
   const privateSegment = await screen.findByRole("button", { name: "Private" })
   expect(privateSegment.getAttribute("aria-pressed")).toBe("true")
   expect(segment("Team").getAttribute("aria-pressed")).toBe("false")
 })
 
+test("a member gets Team only: no Private segment, Team pressed", () => {
+  renderSidebar(true, "user")
+
+  expect(screen.queryByRole("button", { name: "Private" })).toBeNull()
+  expect(segment("Team").getAttribute("aria-pressed")).toBe("true")
+  expect(paneOf("Q4 roadmap").hasAttribute("inert")).toBe(false)
+  expect(paneOf("Meeting notes").hasAttribute("inert")).toBe(true)
+})
+
+test("a member gets the Private segment while the setting is on", () => {
+  renderSidebar(true, "user", true)
+
+  expect(segment("Private").getAttribute("aria-pressed")).toBe("true")
+  expect(segment("Team").getAttribute("aria-pressed")).toBe("false")
+  expect(paneOf("Meeting notes").hasAttribute("inert")).toBe(false)
+  expect(paneOf("Q4 roadmap").hasAttribute("inert")).toBe(true)
+})
+
 test("each space has its own pane, stars and count; the hidden pane is inert", () => {
-  renderSidebar(true)
+  renderSidebar(true, "admin")
 
   const privatePane = paneOf("Meeting notes")
   const teamPane = paneOf("Q4 roadmap")
@@ -277,7 +314,7 @@ test("dropping a private drawing on the Team segment confirms, then shows Team",
 
 test("holding a drag over Team for 450 ms switches to it, so the drawing can go into a Team folder", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
-  renderSidebar(true)
+  renderSidebar(true, "admin")
   const dt = dataTransfer()
   fireEvent.dragStart(screen.getByText("Meeting notes"), { dataTransfer: dt })
   fireEvent.dragOver(segment("Team"), { dataTransfer: dt })
@@ -300,7 +337,7 @@ test("holding a drag over Team for 450 ms switches to it, so the drawing can go 
 
 test("a Team drawing can't be dropped on Private, nor spring-load it", () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] })
-  renderSidebar(true)
+  renderSidebar(true, "admin")
   fireEvent.click(segment("Team"))
   const dt = dataTransfer()
   fireEvent.dragStart(screen.getByText("Q4 roadmap"), { dataTransfer: dt })

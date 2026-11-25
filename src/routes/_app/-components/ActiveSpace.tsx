@@ -52,6 +52,18 @@ export function ActiveSpaceProvider({ children }: { children: ReactNode }) {
     ...currentUserQueryOptions(),
     select: (user) => user.teamEnabled,
   })
+  const { data: role = "user" } = useQuery({
+    ...currentUserQueryOptions(),
+    select: (user) => user.role,
+  })
+  const { data: membersPrivateEnabled = false } = useQuery({
+    ...currentUserQueryOptions(),
+    select: (user) => user.membersPrivateEnabled,
+  })
+  // Private is offered to admins, and to members only while the admin
+  // setting is on. Otherwise every space the sidebar could show is
+  // clamped to Team.
+  const privateAllowed = role === "admin" || membersPrivateEnabled
   const { data: drawings = [] } = useQuery(drawingsQueryOptions())
   const { data: folders = [] } = useQuery(foldersQueryOptions())
   const navigate = useNavigate()
@@ -74,15 +86,20 @@ export function ActiveSpaceProvider({ children }: { children: ReactNode }) {
   const browseSpace = onBrowse ? (param ?? "private") : undefined
 
   const decided = browseSpace ?? openSpace
-  const [chosen, setChosen] = useState<Space>(() => decided ?? "private")
+  const clampSpace = (space: Space | undefined): Space | undefined =>
+    space === "private" && !privateAllowed ? "team" : space
+  const shownDecided = clampSpace(decided)
+  const [chosen, setChosen] = useState<Space>(
+    () => shownDecided ?? (privateAllowed ? "private" : "team"),
+  )
   // Arriving somewhere decides; a switch made there holds until the next
   // arrival (or the open item moving to Team).
   // biome-ignore lint/correctness/useExhaustiveDependencies: openId marks an arrival
   useEffect(() => {
-    if (decided) setChosen(decided)
-  }, [decided, openId])
+    if (shownDecided) setChosen(shownDecided)
+  }, [shownDecided, openId])
 
-  const activeSpace = teamEnabled ? (browseSpace ?? chosen) : null
+  const activeSpace = teamEnabled ? (clampSpace(browseSpace) ?? chosen) : null
 
   const bareHome = onHome && param === undefined
   useEffect(() => {
@@ -97,17 +114,19 @@ export function ActiveSpaceProvider({ children }: { children: ReactNode }) {
 
   const setActiveSpace = useCallback(
     (space: Space) => {
-      setChosen(space)
+      const next = space === "private" && !privateAllowed ? "team" : space
+      setChosen(next)
       // Replace, so swipes and spring-loads don't pile up history entries.
-      if (onHome) navigate({ to: "/draw", search: { space }, replace: true })
+      if (onHome)
+        navigate({ to: "/draw", search: { space: next }, replace: true })
       else if (onBrowse)
         navigate({
           to: "/drawings",
-          search: (prev) => ({ ...prev, space }),
+          search: (prev) => ({ ...prev, space: next }),
           replace: true,
         })
     },
-    [onHome, onBrowse, navigate],
+    [onHome, onBrowse, navigate, privateAllowed],
   )
 
   const value = useMemo(

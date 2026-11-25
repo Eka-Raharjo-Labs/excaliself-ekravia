@@ -86,6 +86,7 @@ function renderOpener(
     image: null,
     hasPassword: true,
     teamEnabled: options.teamEnabled ?? true,
+    membersPrivateEnabled: false,
   })
   client.setQueryData(drawingsQueryOptions().queryKey, drawings)
   client.setQueryData(foldersQueryOptions().queryKey, folders)
